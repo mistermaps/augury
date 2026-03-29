@@ -10,7 +10,7 @@ README = Path(__file__).with_name("README.md").read_text(encoding="utf-8")
 
 setup(
     name="augury",
-    version="0.2.0",
+    version="0.2.1",
     description="Terminal tarot reader with a TUI, CLI, and optional Discord formatter.",
     long_description=README,
     long_description_content_type="text/markdown",

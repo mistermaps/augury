@@ -23,7 +23,9 @@ from . import engine as engine_module
 from .config import (
     atomic_json_write as config_atomic_json_write,
     default_discord_helper_path,
+    default_launcher_dir,
     get_app_paths,
+    install_cli_launchers,
     install_discord_helper,
     load_integrations,
     load_json as config_load_json,
@@ -1877,6 +1879,7 @@ def _paths_payload() -> dict[str, str]:
         "spreads_path": str(SPREADS_PATH),
         "readings_path": str(READINGS_PATH),
         "integrations_path": str(INTEGRATIONS_PATH),
+        "launcher_dir": str(default_launcher_dir()),
     }
 
 
@@ -1914,6 +1917,12 @@ def _run_configure_command(args: argparse.Namespace) -> int:
             return 0
 
     if args.no_input:
+        if args.install_launchers:
+            launchers = install_cli_launchers(args.launcher_dir)
+            integrations.setdefault("discord", {})
+            integrations["discord"]["enabled"] = True
+            integrations["discord"]["helper_path"] = str(launchers["augury-discord"])
+            save_integrations(integrations)
         if args.install_discord_helper:
             helper_path = install_discord_helper(args.discord_helper_path)
             integrations.setdefault("discord", {})
@@ -1952,20 +1961,21 @@ def _run_configure_command(args: argparse.Namespace) -> int:
         pass
     _save_prefs(prefs)
 
-    current_helper = integrations.get("discord", {}).get("helper_path") or str(default_discord_helper_path())
-    should_install_helper = _bool_prompt(
+    launcher_dir = args.launcher_dir or str(default_launcher_dir())
+    should_install_launchers = _bool_prompt(
         console,
-        f"Install or refresh the Discord helper launcher at {current_helper}?",
+        f"Install or refresh PATH launchers in {launcher_dir}?",
         bool(integrations.get("discord", {}).get("enabled", False)),
     )
-    if should_install_helper:
-        helper_target = app.prompt("discord helper path", str(current_helper))
-        helper_path = install_discord_helper(helper_target or None)
+    if should_install_launchers:
+        target_dir = app.prompt("launcher directory", str(launcher_dir))
+        launchers = install_cli_launchers(target_dir or None)
         integrations.setdefault("discord", {})
         integrations["discord"]["enabled"] = True
-        integrations["discord"]["helper_path"] = str(helper_path)
+        integrations["discord"]["helper_path"] = str(launchers["augury-discord"])
         save_integrations(integrations)
-        console.print(f"Discord helper installed at {helper_path}")
+        console.print(f"Installed augury at {launchers['augury']}")
+        console.print(f"Installed augury-discord at {launchers['augury-discord']}")
     else:
         integrations.setdefault("discord", {})
         integrations["discord"].setdefault("enabled", False)
@@ -2067,6 +2077,8 @@ def _build_parser() -> argparse.ArgumentParser:
     configure_parser = subparsers.add_parser("configure", help="Run setup and optional integration install")
     configure_parser.add_argument("--json", action="store_true", help="Emit machine-readable configuration")
     configure_parser.add_argument("--print-paths", action="store_true", help="Print active config and data paths")
+    configure_parser.add_argument("--install-launchers", action="store_true", help="Install augury and augury-discord into a stable bin directory")
+    configure_parser.add_argument("--launcher-dir", default=None, help="Override the launcher install directory")
     configure_parser.add_argument("--install-discord-helper", action="store_true", help="Install the Discord helper launcher")
     configure_parser.add_argument("--discord-helper-path", default=None, help="Override the helper launcher path")
     configure_parser.add_argument("--no-input", action="store_true", help="Do not prompt interactively")

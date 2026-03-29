@@ -73,10 +73,15 @@ def test_read_json_save_writes_history(tmp_path: Path) -> None:
 
 
 def test_paths_command_reports_override(tmp_path: Path) -> None:
-    result = _run("paths", "--json", env={"AUGURY_HOME": str(tmp_path)})
+    result = _run(
+        "paths",
+        "--json",
+        env={"AUGURY_HOME": str(tmp_path), "AUGURY_BIN_DIR": str(tmp_path / "bin")},
+    )
     payload = json.loads(result.stdout)
     assert payload["config_dir"] == str(tmp_path)
     assert payload["data_dir"] == str(tmp_path)
+    assert payload["launcher_dir"] == str(tmp_path / "bin")
 
 
 def test_configure_installs_discord_helper(tmp_path: Path) -> None:
@@ -93,6 +98,27 @@ def test_configure_installs_discord_helper(tmp_path: Path) -> None:
     config_payload = json.loads((tmp_path / "integrations.json").read_text(encoding="utf-8"))
     assert config_payload["discord"]["enabled"] is True
     assert config_payload["discord"]["helper_path"] == str(helper_path)
+
+
+def test_configure_installs_launchers(tmp_path: Path) -> None:
+    launcher_dir = tmp_path / "bin"
+    _run(
+        "configure",
+        "--no-input",
+        "--install-launchers",
+        "--launcher-dir",
+        str(launcher_dir),
+        env={"AUGURY_HOME": str(tmp_path)},
+    )
+    augury_path = launcher_dir / "augury"
+    discord_path = launcher_dir / "augury-discord"
+    assert augury_path.exists()
+    assert discord_path.exists()
+    assert '-m augury "$@"' in augury_path.read_text(encoding="utf-8")
+    assert '-m augury.discord "$@"' in discord_path.read_text(encoding="utf-8")
+    config_payload = json.loads((tmp_path / "integrations.json").read_text(encoding="utf-8"))
+    assert config_payload["discord"]["enabled"] is True
+    assert config_payload["discord"]["helper_path"] == str(discord_path)
 
 
 def test_discord_command_formats_card(tmp_path: Path) -> None:

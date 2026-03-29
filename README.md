@@ -1,6 +1,6 @@
 # Augury
 
-Augury is a terminal tarot reader with a keyboard-driven TUI, a scriptable CLI, and an optional Discord formatter/helper. It is designed to be installable as a normal Python package so `augury` lands on your `PATH` without any machine-local hacks.
+Augury is a terminal tarot reader with a keyboard-driven TUI, a scriptable CLI, and an optional Discord formatter/helper. It is designed to expose stable `augury` and `augury-discord` commands on `PATH`, even on systems where `pip` drops console scripts into a version-specific directory.
 
 Created by **cassette, aka maps**  
 Homepage: <https://cassette.help>
@@ -21,6 +21,12 @@ Install from a checkout:
 pip install .
 ```
 
+Then install stable launchers into `/usr/local/bin` by default, or `~/.local/bin` if `/usr/local/bin` is not writable:
+
+```bash
+python3 -m augury configure --no-input --install-launchers
+```
+
 Or, for a user-local CLI install:
 
 ```bash
@@ -31,6 +37,10 @@ Once installed, the package provides:
 
 - `augury`
 - `augury-discord`
+
+The launcher install step above writes small wrapper scripts that execute `python -m augury` and
+`python -m augury.discord` with the interpreter Augury was installed under. That keeps the binary
+path stable for agents even if `pip` chose a versioned script directory internally.
 
 ## Quick Start
 
@@ -58,7 +68,7 @@ Inspect paths:
 augury paths
 ```
 
-Run setup and optionally install a Discord helper launcher:
+Run setup and optionally install stable launchers:
 
 ```bash
 augury configure
@@ -76,7 +86,8 @@ augury-discord card "The Fool"
 augury-discord read --spread celtic-cross --query "What is the larger pattern?"
 ```
 
-The `configure` flow can also install a small `augury-discord` launcher script to a user bin directory when you want an explicit helper outside the package installer.
+The `configure` flow can install stable `augury` and `augury-discord` launchers into a shared bin
+directory. It still supports an explicit `augury-discord` helper path when you need one.
 
 ## Storage
 
@@ -119,4 +130,3 @@ PYTHONPATH=src python -m augury
 ## License
 
 MIT. See [LICENSE](LICENSE).
-

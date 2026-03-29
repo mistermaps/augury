@@ -1,4 +1,4 @@
-"""Shared configuration, storage paths, and helper-install utilities."""
+"""Shared configuration, storage paths, and launcher-install utilities."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 APP_NAME = "augury"
+SYSTEM_BIN_DIR = Path("/usr/local/bin")
 DEFAULT_INTEGRATIONS = {
     "discord": {
         "enabled": False,
@@ -55,6 +56,21 @@ def default_user_bin_dir() -> Path:
     if os.name == "nt":
         return home / "AppData" / "Local" / "Microsoft" / "WindowsApps"
     return Path(os.environ.get("AUGURY_BIN_DIR", home / ".local" / "bin"))
+
+
+def _has_write_access(path: Path) -> bool:
+    candidate = path.expanduser()
+    probe = candidate if candidate.exists() else candidate.parent
+    return probe.exists() and os.access(probe, os.W_OK | os.X_OK)
+
+
+def default_launcher_dir() -> Path:
+    override = os.environ.get("AUGURY_BIN_DIR")
+    if override:
+        return Path(override).expanduser()
+    if os.name != "nt" and _has_write_access(SYSTEM_BIN_DIR):
+        return SYSTEM_BIN_DIR
+    return default_user_bin_dir()
 
 
 def get_app_paths() -> AppPaths:
@@ -113,20 +129,45 @@ def save_integrations(config: dict[str, Any]) -> None:
 
 def default_discord_helper_path() -> Path:
     if os.name == "nt":
-        return default_user_bin_dir() / "augury-discord.cmd"
-    return default_user_bin_dir() / "augury-discord"
+        return default_launcher_dir() / "augury-discord.cmd"
+    return default_launcher_dir() / "augury-discord"
+
+
+def _launcher_filename(script_name: str) -> str:
+    if os.name == "nt":
+        return f"{script_name}.cmd"
+    return script_name
+
+
+def _launcher_script(module: str) -> str:
+    if os.name == "nt":
+        return "@echo off\r\n" f"\"{sys.executable}\" -m {module} %*\r\n"
+    return "#!/usr/bin/env sh\n" f"exec \"{sys.executable}\" -m {module} \"$@\"\n"
+
+
+def install_cli_launcher(script_name: str, module: str, bin_dir: str | Path | None = None) -> Path:
+    target_dir = Path(bin_dir).expanduser() if bin_dir is not None else default_launcher_dir()
+    target = target_dir / _launcher_filename(script_name)
+    ensure_parent(target)
+    target.write_text(_launcher_script(module), encoding="utf-8")
+    if os.name != "nt":
+        target.chmod(0o755)
+    return target
+
+
+def install_cli_launchers(bin_dir: str | Path | None = None) -> dict[str, Path]:
+    return {
+        "augury": install_cli_launcher("augury", "augury", bin_dir),
+        "augury-discord": install_cli_launcher("augury-discord", "augury.discord", bin_dir),
+    }
 
 
 def install_discord_helper(destination: str | Path | None = None) -> Path:
-    target = Path(destination).expanduser() if destination is not None else default_discord_helper_path()
+    if destination is None:
+        return install_cli_launcher("augury-discord", "augury.discord")
+    target = Path(destination).expanduser()
     ensure_parent(target)
-
-    if os.name == "nt":
-        script = "@echo off\r\n" f"\"{sys.executable}\" -m augury.discord %*\r\n"
-    else:
-        script = "#!/usr/bin/env sh\n" f"exec \"{sys.executable}\" -m augury.discord \"$@\"\n"
-
-    target.write_text(script, encoding="utf-8")
+    target.write_text(_launcher_script("augury.discord"), encoding="utf-8")
     if os.name != "nt":
         target.chmod(0o755)
     return target
