@@ -24,7 +24,6 @@ from .engine import (
     consultation_to_json,
     daily_consultation,
     load_consultations,
-    method_name,
     save_consultation,
 )
 
@@ -111,10 +110,9 @@ def _run_configure_command(args: argparse.Namespace) -> int:
             return _emit_json(_configuration_payload())
         return 0
 
-    app = IChingApp()
-    prefs["default_method"] = app.choose_method(str(prefs.get("default_method", DEFAULT_ICHING_PREFS["default_method"])))
     prefs["show_trigrams"] = _bool_prompt(console, "Show trigram names in views?", bool(prefs.get("show_trigrams", True)))
     prefs["show_line_text"] = _bool_prompt(console, "Show changing-line text in reading views?", bool(prefs.get("show_line_text", True)))
+    app = IChingApp()
     history_value = app.prompt("history limit", str(prefs.get("history_limit", DEFAULT_ICHING_PREFS["history_limit"])))
     try:
         prefs["history_limit"] = max(1, int(history_value))
@@ -140,7 +138,7 @@ def _parse_date(value: str | None) -> date | None:
 
 
 def _run_cast_command(args: argparse.Namespace) -> int:
-    consultation = cast_consultation(method=args.method, query=args.query)
+    consultation = cast_consultation(query=args.query)
     if not args.no_save:
         save_consultation(consultation)
     payload = consultation_to_json(consultation)
@@ -154,7 +152,7 @@ def _run_cast_command(args: argparse.Namespace) -> int:
 
 
 def _run_daily_command(args: argparse.Namespace) -> int:
-    consultation = daily_consultation(_parse_date(args.date), method=args.method)
+    consultation = daily_consultation(_parse_date(args.date))
     if not args.no_save:
         save_consultation(consultation)
     payload = consultation_to_json(consultation)
@@ -190,13 +188,11 @@ def _run_history_command(args: argparse.Namespace) -> int:
 
 def _add_command_parsers(subparsers: Any, *, nested: bool = False) -> None:
     cast_parser = subparsers.add_parser("cast", help="Cast an I Ching consultation")
-    cast_parser.add_argument("--method", default=DEFAULT_ICHING_PREFS["default_method"], help="Casting method slug")
     cast_parser.add_argument("--query", default=None, help="Optional consultation prompt")
     cast_parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
     cast_parser.add_argument("--no-save", action="store_true", help="Do not persist the consultation")
 
     daily_parser = subparsers.add_parser("daily", help="Draw the deterministic daily hexagram")
-    daily_parser.add_argument("--method", default=DEFAULT_ICHING_PREFS["default_method"], help="Casting method slug")
     daily_parser.add_argument("--date", default=None, help="Override the date in YYYY-MM-DD format")
     daily_parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
     daily_parser.add_argument("--no-save", action="store_true", help="Do not persist the consultation")

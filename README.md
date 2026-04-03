@@ -10,6 +10,7 @@ Homepage: <https://cassette.help>
 - System chooser in `augury` for tarot and I Ching
 - Full-screen tarot UI for browsing cards, drawing readings, managing custom spreads, and reviewing history
 - Full-screen I Ching UI for casting consultations, browsing all 64 hexagrams, and reviewing consultation history
+- Built-in I Ching casting model using three coins with yarrow-stalk probabilities
 - CLI commands for tarot via `augury read`, `augury daily`, `augury card`, and namespaced tarot commands via `augury tarot ...`
 - Full I Ching CLI via `augury iching ...` and standalone `iching ...`
 - JSON output for automation and scripting
@@ -43,8 +44,9 @@ Once installed, the package provides:
 - `iching`
 
 The launcher install step above writes small wrapper scripts that execute `python -m augury` and
-`python -m augury.discord` with the interpreter Augury was installed under. That keeps the binary
-path stable for agents even if `pip` chose a versioned script directory internally.
+`python -m augury.discord` and `python -m augury.iching` with the interpreter Augury was installed
+under. That keeps the binary path stable for agents even if `pip` chose a versioned script
+directory internally.
 
 ## Quick Start
 
@@ -82,6 +84,24 @@ Run the deterministic daily hexagram from the standalone CLI:
 
 ```bash
 iching daily --date 2026-04-03
+```
+
+Show a specific hexagram:
+
+```bash
+iching hexagram 24
+```
+
+Inspect I Ching-specific paths:
+
+```bash
+iching paths
+```
+
+Configure the standalone I Ching app:
+
+```bash
+iching configure
 ```
 
 Inspect paths:
@@ -128,6 +148,9 @@ You can override these with:
 - `AUGURY_BIN_DIR`
 
 Tarot history is stored in `readings.jsonl`; I Ching consultations are stored in `iching_readings.jsonl`.
+
+I Ching mode ships with the full Wilhelm/Baynes text corpus plus line commentary, and the daily
+hexagram is deterministic for a given calendar date.
 
 ## Development
 

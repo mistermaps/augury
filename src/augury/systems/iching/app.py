@@ -35,8 +35,6 @@ from .engine import (
     daily_consultation,
     generate_study_tips,
     load_consultations,
-    method_name,
-    method_specs,
     save_consultation,
 )
 
@@ -60,11 +58,13 @@ MENU_ITEMS = [
     ("d", "&Daily Hexagram", "daily_hexagram"),
     ("h", "&Hexagram Browser", "hexagram_browser"),
     ("c", "&Consultation History", "consultation_history"),
-    ("m", "Casting &Methods", "casting_methods"),
     ("p", "&Preferences", "preferences"),
     ("q", "&Quit", None),
 ]
 MENU_HINT = "j/k move  |  enter select  |  hotkeys active"
+YANG_LINE = "───────"
+YIN_LINE = "─── ───"
+CHANGE_MARK = "●"
 
 
 def _load_prefs() -> dict[str, Any]:
@@ -96,18 +96,19 @@ def _menu_label(template: str, selected: bool) -> tuple[str, str]:
     return markup, plain
 
 
-def _line_glyph_from_value(value: int, changing: bool) -> str:
-    if value in {7, 9}:
-        core = "───────"
-        return f"{core}  {'9' if changing else '7'}"
-    core = "── ──"
-    return f"{core}   {'6' if changing else '8'}"
+def _line_core_from_value(value: int) -> str:
+    return YANG_LINE if value in {7, 9} else YIN_LINE
+
+
+def _render_line_row(line_number: int, value: int, changing: bool) -> str:
+    marker = CHANGE_MARK if changing else " "
+    return f"{line_number}  {marker} {_line_core_from_value(value)}"
 
 
 def _render_consultation_lines(lines: list[Any]) -> str:
     rows = []
     for line in reversed(lines):
-        rows.append(f"{line.line_number}  {_line_glyph_from_value(int(line.value), bool(line.changing))}")
+        rows.append(_render_line_row(int(line.line_number), int(line.value), bool(line.changing)))
     return "\n".join(rows)
 
 
@@ -116,7 +117,7 @@ def _render_hexagram_lines(hexagram: Hexagram) -> str:
     for index, bit in enumerate(hexagram.binary_top_to_bottom, start=1):
         line_number = 7 - index
         value = 7 if bit == "1" else 8
-        rows.append(f"{line_number}  {_line_glyph_from_value(value, False)}")
+        rows.append(_render_line_row(line_number, value, False))
     return "\n".join(rows)
 
 
@@ -250,7 +251,7 @@ def show_consultation(
         console.print(
             Panel(
                 Text(consultation.interpretation, style=STONE),
-                title=f"Interpretation  ·  {method_name(consultation.method)}",
+                title="Interpretation",
                 border_style=AMBER,
                 box=box.ASCII,
                 padding=(1, 2),
@@ -314,10 +315,7 @@ class IChingApp:
     def draw_main_menu(self, selected: int) -> None:
         self.refresh()
         consultations = load_consultations()
-        subtitle = (
-            f"method {method_name(str(self.prefs.get('default_method', DEFAULT_ICHING_PREFS['default_method'])))}"
-            f"  ·  consultations {len(consultations)}  ·  hexagrams {len(all_hexagrams())}"
-        )
+        subtitle = f"consultations {len(consultations)}  ·  hexagrams {len(all_hexagrams())}"
         clear_screen(self.console)
         self.console.print(logo_banner(self.console, logo_lines=LOGO_LINES, taglines=TAGLINES, subtitle=subtitle))
         self.console.print("")
@@ -325,7 +323,7 @@ class IChingApp:
             stats = Table.grid(padding=(0, 3))
             stats.add_column(style=AMBER_SOFT)
             stats.add_column(style=STONE)
-            stats.add_row("Default Method", method_name(str(self.prefs.get("default_method", DEFAULT_ICHING_PREFS["default_method"]))))
+            stats.add_row("Casting Model", "Three coins with yarrow odds")
             stats.add_row("Show Trigrams", "on" if self.prefs.get("show_trigrams", True) else "off")
             stats.add_row("Show Line Text", "on" if self.prefs.get("show_line_text", True) else "off")
             self.console.print(Align.center(Panel(stats, title="Current State", border_style=AMBER, box=box.ASCII, padding=(0, 2), expand=False)))
@@ -379,60 +377,15 @@ class IChingApp:
         while True:
             self.draw_main_menu(0)
             self.console.print("")
-            choice = self.prompt("choice [n/d/h/c/m/p/q]", "q").lower()
+            choice = self.prompt("choice [n/d/h/c/p/q]", "q").lower()
             action = mapping.get(choice)
             if action is None:
                 return 0
             getattr(self, action)()
 
-    def choose_method(self, initial: str | None = None) -> str:
-        methods = method_specs()
-        index = 0
-        if initial:
-            for method_index, method in enumerate(methods):
-                if method["slug"] == initial:
-                    index = method_index
-                    break
-        if not sys.stdin.isatty():
-            self.console.print("")
-            for number, method in enumerate(methods, start=1):
-                self.console.print(f"{number:2}. {method['name']}")
-            choice = self.prompt("method number", str(index + 1))
-            try:
-                return str(methods[max(0, min(len(methods) - 1, int(choice) - 1))]["slug"])
-            except Exception:
-                return str(methods[index]["slug"])
-        while True:
-            clear_screen(self.console)
-            method = methods[index]
-            self.console.print(logo_banner(self.console, logo_lines=LOGO_LINES, taglines=TAGLINES, subtitle="choose method"))
-            self.console.print("")
-            table = Table(show_header=True, header_style=f"bold {AMBER}", box=box.ASCII, padding=(0, 1))
-            table.add_column("#", style="dim", width=4)
-            table.add_column("method", style=AMBER_SOFT)
-            table.add_column("description", style=STONE)
-            for row_index, item in enumerate(methods, start=1):
-                style = f"bold {AMBER}" if row_index - 1 == index else ""
-                table.add_row(str(row_index), item["name"], item["description"], style=style)
-            self.console.print(table)
-            self.console.print("")
-            self.console.print(Panel(method["description"], title="Current Method", border_style=AMBER, box=box.ASCII))
-            self.console.print("")
-            self.console.print("[dim]j/k move  enter choose  q cancel[/dim]")
-            key = read_key()
-            if key in ("UP", "k"):
-                index = (index - 1) % len(methods)
-            elif key in ("DOWN", "j"):
-                index = (index + 1) % len(methods)
-            elif key in ("\r", "\n"):
-                return str(methods[index]["slug"])
-            elif key in {"q", "CTRL_C", "CTRL_D"}:
-                return str(methods[index]["slug"])
-
     def new_cast(self) -> None:
-        method = self.choose_method(str(self.prefs.get("default_method", DEFAULT_ICHING_PREFS["default_method"])))
         query = self.prompt("query", "")
-        consultation = cast_consultation(method=method, query=query or None)
+        consultation = cast_consultation(query=query or None)
         save_consultation(consultation)
         show_consultation(
             self.console,
@@ -442,7 +395,7 @@ class IChingApp:
         )
 
     def daily_hexagram(self) -> None:
-        consultation = daily_consultation(date.today(), method=str(self.prefs.get("default_method", DEFAULT_ICHING_PREFS["default_method"])))
+        consultation = daily_consultation(date.today())
         save_consultation(consultation)
         show_consultation(
             self.console,
@@ -564,27 +517,8 @@ class IChingApp:
             elif key in {"q", "CTRL_C", "CTRL_D"}:
                 return
 
-    def casting_methods(self) -> None:
-        clear_screen(self.console)
-        self.console.print(logo_banner(self.console, logo_lines=LOGO_LINES, taglines=TAGLINES, subtitle="casting methods"))
-        self.console.print("")
-        table = Table(show_header=True, header_style=f"bold {AMBER}", box=box.ASCII, padding=(0, 1))
-        table.add_column("method", style=AMBER_SOFT)
-        table.add_column("description", style=STONE)
-        table.add_column("line odds", style=STONE)
-        for item in method_specs():
-            table.add_row(
-                item["name"],
-                item["description"],
-                "6:1  7:5  8:7  9:3",
-            )
-        self.console.print(table)
-        self.console.print("")
-        self.pause()
-
     def preferences(self) -> None:
         options = [
-            ("default_method", "Default Method"),
             ("show_trigrams", "Show Trigrams"),
             ("show_line_text", "Show Line Text"),
             ("history_limit", "History Limit"),
@@ -620,8 +554,6 @@ class IChingApp:
                         self.prefs[pref_key] = max(1, int(value))
                     except Exception:
                         pass
-                elif pref_key == "default_method":
-                    self.prefs[pref_key] = self.choose_method(str(self.prefs.get(pref_key, DEFAULT_ICHING_PREFS["default_method"])))
                 _save_prefs(self.prefs)
             elif key in {"q", "CTRL_C", "CTRL_D"}:
                 return

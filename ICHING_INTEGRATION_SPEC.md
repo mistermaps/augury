@@ -10,6 +10,16 @@ Add a full I Ching application to Augury that:
 
 This should be a first-class sibling to tarot, not a special-case plugin screen.
 
+## Implemented Direction
+
+The current implementation follows this shape:
+
+- `augury` opens with a tarot / I Ching system chooser
+- `iching` is the standalone launcher
+- the I Ching app uses a single built-in casting model: three coins with yarrow-stalk probabilities
+- daily hexagrams are deterministic by calendar date
+- Discord support is deferred
+
 ## Product Shape
 
 ### Inside Augury
