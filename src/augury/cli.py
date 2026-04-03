@@ -185,9 +185,10 @@ MENU_HINT = "j/k move  |  enter select  |  hotkeys active"
 SYSTEM_MENU_ITEMS = [
     ("t", "&Tarot", "tarot"),
     ("i", "&I Ching", "iching"),
+    ("c", "&Combined", "combined"),
     ("q", "&Quit", None),
 ]
-SYSTEM_MENU_HINT = "j/k move  |  enter select  |  tarot / i ching hotkeys active"
+SYSTEM_MENU_HINT = "j/k move  |  enter select  |  tarot / i ching / combined hotkeys active"
 FILTER_OPTIONS = [
     ("all", "All", None),
     ("major", "Major", "major"),
@@ -1355,6 +1356,181 @@ def _show_reading(console: Console, reading: Any, title: str = "reading") -> Non
         return
 
 
+def _iching_line_core(value: int) -> str:
+    return "───────" if value in {7, 9} else "─── ───"
+
+
+def _iching_line_row(line_number: int, value: int, changing: bool) -> str:
+    marker = "●" if changing else " "
+    return f"{line_number}  {marker} {_iching_line_core(value)}"
+
+
+def _render_iching_consultation_panels(consultation: Any, show_trigrams: bool = True) -> list[Any]:
+    def hexagram_panel(hexagram: Any, lines_rendered: str, title: str) -> Any:
+        if not HAS_RICH:
+            return f"{title}\n{lines_rendered}"
+        meta = Table.grid(padding=(0, 1))
+        meta.add_column(style=AMBER_SOFT)
+        meta.add_column(style=STONE)
+        meta.add_row("Number", str(hexagram.number))
+        meta.add_row("Name", str(hexagram.name))
+        meta.add_row("Chinese", str(getattr(hexagram, "chinese_name", "") or "-"))
+        if show_trigrams:
+            meta.add_row("Trigrams", f"{hexagram.upper_trigram} over {hexagram.lower_trigram}")
+        meta.add_row("Keywords", ", ".join(getattr(hexagram, "keywords", [])[:4]) or "-")
+        return Panel(
+            Group(
+                Align.center(Text(lines_rendered, style=AMBER_SOFT)),
+                Text("", style=STONE),
+                meta,
+            ),
+            title=title,
+            subtitle=str(getattr(hexagram, "unicode_symbol", "") or ""),
+            border_style=AMBER,
+            box=box.ASCII,
+        )
+
+    primary_lines = "\n".join(
+        _iching_line_row(int(line.line_number), int(line.value), bool(line.changing))
+        for line in reversed(consultation.lines)
+    )
+    panels = [hexagram_panel(consultation.primary_hexagram, primary_lines, "Primary Hexagram")]
+    if getattr(consultation, "relating_hexagram", None) is not None:
+        relating = consultation.relating_hexagram
+        relating_lines = "\n".join(
+            _iching_line_row(
+                7 - index,
+                7 if bit == "1" else 8,
+                False,
+            )
+            for index, bit in enumerate(str(relating.binary_top_to_bottom), start=1)
+        )
+        panels.append(hexagram_panel(relating, relating_lines, "Relating Hexagram"))
+    return panels
+
+
+def _show_combined_reading(
+    console: Console,
+    query: str | None,
+    reading: Any,
+    consultation: Any,
+    *,
+    tarot_show_tips: bool = True,
+    iching_show_trigrams: bool = True,
+    iching_show_line_text: bool = True,
+) -> None:
+    from .systems.iching.engine import generate_study_tips
+
+    _clear_screen(console)
+    subtitle = f"combined reading  ·  {_timestamp_text(reading)}"
+    console.print(_banner(console, subtitle))
+    console.print("")
+    if query and HAS_RICH:
+        console.print(
+            Panel(
+                Text(query, style=STONE),
+                title="Query",
+                border_style=AMBER,
+                box=box.ASCII,
+                padding=(0, 2),
+            )
+        )
+    elif query:
+        console.print(f"Query: {query}")
+        console.print("")
+
+    if HAS_RICH:
+        console.print(
+            Panel(
+                Columns([_render_card_panel(drawn) for drawn in reading.drawn_cards], expand=True, equal=True),
+                title=f"Tarot  ·  {reading.spread_name}",
+                border_style=AMBER,
+                box=box.ASCII,
+                padding=(0, 1),
+            )
+        )
+        console.print(
+            Panel(
+                Text(reading.interpretation or "(no interpretation)", style=STONE),
+                title="Tarot Interpretation",
+                border_style=AMBER,
+                box=box.ASCII,
+                padding=(1, 2),
+            )
+        )
+        console.print(
+            Panel(
+                _render_patterns_table(reading),
+                title="Tarot Patterns",
+                border_style=AMBER,
+                box=box.ASCII,
+                padding=(0, 1),
+            )
+        )
+        if tarot_show_tips:
+            tips = _generate_tips(reading)
+            console.print(
+                Panel(
+                    Group(*[Text(f"- {tip}", style=STONE) for tip in tips] or [Text("(no tips)", style="dim")]),
+                    title="Tarot Study Notes",
+                    border_style=AMBER,
+                    box=box.ASCII,
+                    padding=(0, 1),
+                )
+            )
+        console.print(
+            Panel(
+                Columns(_render_iching_consultation_panels(consultation, show_trigrams=iching_show_trigrams), expand=True, equal=True),
+                title="I Ching",
+                border_style=AMBER,
+                box=box.ASCII,
+                padding=(0, 1),
+            )
+        )
+        console.print(
+            Panel(
+                Text(consultation.interpretation or "(no interpretation)", style=STONE),
+                title="I Ching Interpretation",
+                border_style=AMBER,
+                box=box.ASCII,
+                padding=(1, 2),
+            )
+        )
+        if consultation.changing_lines and iching_show_line_text:
+            line_table = Table(show_header=True, header_style=f"bold {AMBER}", box=box.ASCII, padding=(0, 1))
+            line_table.add_column("Line", style=AMBER_SOFT, width=6)
+            line_table.add_column("Text", style=STONE)
+            line_table.add_column("Comments", style=STONE)
+            for number in consultation.changing_lines:
+                line_table.add_row(
+                    str(number),
+                    consultation.primary_hexagram.line_texts[number - 1] or "-",
+                    consultation.primary_hexagram.line_comments[number - 1] or "-",
+                )
+            console.print(Panel(line_table, title="Changing Lines", border_style=AMBER, box=box.ASCII))
+        console.print(
+            Panel(
+                Group(*[Text(f"- {tip}", style=STONE) for tip in generate_study_tips(consultation)]),
+                title="I Ching Study Notes",
+                border_style=AMBER,
+                box=box.ASCII,
+                padding=(0, 1),
+            )
+        )
+    else:
+        console.print("Tarot")
+        console.print(reading.interpretation)
+        console.print("")
+        console.print("I Ching")
+        console.print(consultation.interpretation)
+    console.print("")
+    console.print("[dim]enter to return[/dim]" if HAS_RICH else "enter to return")
+    try:
+        console.input("")
+    except (EOFError, KeyboardInterrupt):
+        return
+
+
 class AuguryApp:
     def __init__(self) -> None:
         self.console = Console(highlight=False, force_terminal=True) if HAS_RICH else Console()
@@ -1849,6 +2025,99 @@ class SystemChooserApp:
     def __init__(self) -> None:
         self.console = Console(highlight=False, force_terminal=True) if HAS_RICH else Console()
 
+    def prompt(self, label: str, default: str = "") -> str:
+        prompt = f"[bold {AMBER}]{label}[/] "
+        if default:
+            prompt += f"[dim](default: {default})[/] "
+        try:
+            value = self.console.input(prompt if HAS_RICH else f"{label} ")
+        except (EOFError, KeyboardInterrupt):
+            return ""
+        value = value.strip()
+        return value if value else default
+
+    def choose_combined_tarot_mode(self) -> str | None:
+        options = [
+            ("default", "Use Tarot Defaults"),
+            ("configure", "Configure Tarot"),
+            ("cancel", "Cancel"),
+        ]
+        if not sys.stdin.isatty():
+            self.console.print("")
+            for number, (_key, label) in enumerate(options, start=1):
+                self.console.print(f"{number:2}. {label}")
+            choice = self.prompt("mode number", "1")
+            try:
+                return options[max(0, min(len(options) - 1, int(choice) - 1))][0]
+            except Exception:
+                return options[0][0]
+        cursor = 0
+        while True:
+            _clear_screen(self.console)
+            self.console.print(_banner(self.console, "combined reading  ·  tarot setup"))
+            self.console.print("")
+            table = Table(show_header=True, header_style=f"bold {AMBER}", box=box.ASCII, padding=(0, 1))
+            table.add_column("#", style="dim", width=4)
+            table.add_column("mode", style=AMBER_SOFT)
+            for index, (_key, label) in enumerate(options, start=1):
+                style = f"bold {AMBER}" if index - 1 == cursor else ""
+                table.add_row(str(index), label, style=style)
+            self.console.print(table)
+            self.console.print("")
+            self.console.print("[dim]j/k move  enter choose  q cancel[/dim]")
+            key = _read_key()
+            if key in ("UP", "k"):
+                cursor = (cursor - 1) % len(options)
+            elif key in ("DOWN", "j"):
+                cursor = (cursor + 1) % len(options)
+            elif key in ("\r", "\n"):
+                return options[cursor][0]
+            elif key in {"q", "CTRL_C", "CTRL_D"}:
+                return None
+
+    def combined_reading(self) -> None:
+        from .systems.iching.engine import cast_consultation, save_consultation
+
+        query = self.prompt("query", "")
+        if not query:
+            return
+        mode = self.choose_combined_tarot_mode()
+        if mode in {None, "cancel"}:
+            return
+
+        tarot_prefs = _load_prefs()
+        custom_spreads = _load_custom_spreads()
+        spread_name = str(tarot_prefs.get("default_spread", "three-card"))
+        if mode == "configure":
+            tarot_app = AuguryApp()
+            spread = tarot_app.choose_spread(spread_name)
+            if spread is None:
+                return
+            spread_name = str(spread["slug"])
+            tarot_prefs["allow_reversals"] = _bool_prompt(
+                self.console,
+                "Allow reversed cards for this combined reading?",
+                bool(tarot_prefs.get("allow_reversals", True)),
+            )
+            tarot_prefs["show_tips"] = _bool_prompt(
+                self.console,
+                "Show tarot study notes in the combined reading?",
+                bool(tarot_prefs.get("show_tips", True)),
+            )
+
+        spread = _resolve_spread(spread_name, custom_spreads)
+        reading = _draw_reading(spread, query, tarot_prefs)
+        consultation = cast_consultation(query=query)
+        _save_reading(reading)
+        save_consultation(consultation)
+        _show_combined_reading(
+            self.console,
+            query,
+            reading,
+            consultation,
+            tarot_show_tips=bool(tarot_prefs.get("show_tips", True)),
+        )
+
     def draw_main_menu(self, selected: int) -> None:
         from .systems.iching.engine import load_consultations
 
@@ -1866,7 +2135,7 @@ class SystemChooserApp:
             stats.add_column(style=STONE)
             stats.add_row("Tarot Deck", str(len(_get_all_cards())))
             stats.add_row("I Ching Text", "64 hexagrams")
-            stats.add_row("Launch", "choose a system below")
+            stats.add_row("Launch", "choose a system or combined reading")
             self.console.print(
                 Align.center(
                     Panel(
@@ -1902,6 +2171,9 @@ class SystemChooserApp:
             from .systems.iching.app import IChingApp
 
             IChingApp().run()
+            return 0
+        if action == "combined":
+            self.combined_reading()
             return 0
         return 0
 
@@ -1940,7 +2212,7 @@ class SystemChooserApp:
         while True:
             self.draw_main_menu(0)
             self.console.print("")
-            choice = self.console.input("choice [t/i/q] ").strip().lower()
+            choice = self.console.input("choice [t/i/c/q] ").strip().lower()
             action = mapping.get(choice)
             if action is None:
                 return 0
@@ -2178,6 +2450,45 @@ def _run_history_command(args: argparse.Namespace) -> int:
     return _human_history(console, limit)
 
 
+def _run_combined_command(args: argparse.Namespace) -> int:
+    from .systems.iching.engine import cast_consultation, consultation_to_json, save_consultation
+
+    prefs = _load_prefs()
+    if args.allow_reversals is not None:
+        prefs["allow_reversals"] = bool(args.allow_reversals)
+    custom_spreads = _load_custom_spreads()
+    spread = _resolve_spread(args.spread or str(prefs.get("default_spread", "three-card")), custom_spreads)
+    reading = _draw_reading(spread, args.query, prefs)
+    consultation = cast_consultation(query=args.query)
+    if not args.no_save:
+        _save_reading(reading)
+        save_consultation(consultation)
+    payload = {
+        "system": "combined",
+        "query": args.query,
+        "tarot": _reading_to_json(reading),
+        "iching": consultation_to_json(consultation),
+        "saved": not args.no_save,
+        "saved_to": None
+        if args.no_save
+        else {
+            "tarot": str(READINGS_PATH),
+            "iching": str(APP_PATHS.iching_readings_path),
+        },
+    }
+    if args.json:
+        return _emit_json(payload)
+    console = Console(highlight=False, force_terminal=True) if HAS_RICH else Console()
+    _show_combined_reading(
+        console,
+        args.query,
+        reading,
+        consultation,
+        tarot_show_tips=bool(prefs.get("show_tips", True)),
+    )
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="augury",
@@ -2204,6 +2515,26 @@ def _build_parser() -> argparse.ArgumentParser:
     history_parser = subparsers.add_parser("history", help="Show reading history")
     history_parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
     history_parser.add_argument("--limit", type=int, default=25, help="Number of readings to show")
+
+    combined_parser = subparsers.add_parser("combined", help="Run one query through tarot and I Ching together")
+    combined_parser.add_argument("--query", default=None, help="Question or reading prompt")
+    combined_parser.add_argument("--spread", default=None, help="Tarot spread name or slug")
+    combined_parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+    combined_parser.add_argument("--no-save", action="store_true", help="Do not persist either reading")
+    combined_parser.set_defaults(allow_reversals=None)
+    combined_reversal_group = combined_parser.add_mutually_exclusive_group()
+    combined_reversal_group.add_argument(
+        "--allow-reversals",
+        dest="allow_reversals",
+        action="store_true",
+        help="Force tarot reversals on for this combined reading",
+    )
+    combined_reversal_group.add_argument(
+        "--no-reversals",
+        dest="allow_reversals",
+        action="store_false",
+        help="Force tarot reversals off for this combined reading",
+    )
 
     configure_parser = subparsers.add_parser("configure", help="Run setup and optional integration install")
     configure_parser.add_argument("--json", action="store_true", help="Emit machine-readable configuration")
@@ -2257,6 +2588,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_card_command(args)
     if args.command == "history":
         return _run_history_command(args)
+    if args.command == "combined":
+        return _run_combined_command(args)
     if args.command == "configure":
         return _run_configure_command(args)
     if args.command == "paths":

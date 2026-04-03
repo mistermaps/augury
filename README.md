@@ -8,11 +8,14 @@ Homepage: <https://cassette.help>
 ## Features
 
 - System chooser in `augury` for tarot and I Ching
+- System chooser in `augury` for tarot, I Ching, and a combined tarot + I Ching reading
 - Full-screen tarot UI for browsing cards, drawing readings, managing custom spreads, and reviewing history
 - Full-screen I Ching UI for casting consultations, browsing all 64 hexagrams, and reviewing consultation history
 - Built-in I Ching casting model using three coins with yarrow-stalk probabilities
+- Combined reading flow that runs one query through both backends, with a tarot-defaults vs. configure-tarot picker
 - CLI commands for tarot via `augury read`, `augury daily`, `augury card`, and namespaced tarot commands via `augury tarot ...`
 - Full I Ching CLI via `augury iching ...` and standalone `iching ...`
+- Combined CLI via `augury combined ...`
 - JSON output for automation and scripting
 - Optional Discord-friendly formatter via `augury-discord`
 - Local preferences, custom spreads, and reading history stored in standard user config/data directories
@@ -78,6 +81,12 @@ Cast an I Ching consultation:
 
 ```bash
 augury iching cast --query "What is shifting?"
+```
+
+Run one query through both tarot and I Ching:
+
+```bash
+augury combined --query "What am I missing right now?"
 ```
 
 Run the deterministic daily hexagram from the standalone CLI:
@@ -151,6 +160,8 @@ Tarot history is stored in `readings.jsonl`; I Ching consultations are stored in
 
 I Ching mode ships with the full Wilhelm/Baynes text corpus plus line commentary, and the daily
 hexagram is deterministic for a given calendar date.
+
+The combined mode saves to both history files unless `--no-save` is used.
 
 ## Development
 
